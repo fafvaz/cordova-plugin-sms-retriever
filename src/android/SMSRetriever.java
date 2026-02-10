@@ -169,15 +169,8 @@ public class SMSRetriever extends CordovaPlugin implements SMSBroadcastReceiver.
                     intentFilter.addAction(SmsRetriever.SMS_RETRIEVED_ACTION);
 
                     try {
-                        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.S) {
-                            try {
-								// Access the RECEIVER_EXPORTED constant through reflection
-								int receiverExportedFlag = Context.class.getField("RECEIVER_EXPORTED").getInt(null);
-								applicationContext.registerReceiver(smsBroadcastReceiver, intentFilter, receiverExportedFlag);
-							} catch (NoSuchFieldException | IllegalAccessException | IllegalArgumentException e) {
-								// In case of any exceptions, fallback to registering without the flag
-								applicationContext.registerReceiver(smsBroadcastReceiver, intentFilter);
-							}
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            applicationContext.registerReceiver(smsBroadcastReceiver, intentFilter, Context.RECEIVER_EXPORTED);
                         } else {
                             applicationContext.registerReceiver(smsBroadcastReceiver, intentFilter);
                         }	
