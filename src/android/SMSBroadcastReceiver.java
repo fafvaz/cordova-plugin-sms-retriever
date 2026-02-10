@@ -34,8 +34,12 @@ public class SMSBroadcastReceiver extends BroadcastReceiver {
             switch (status.getStatusCode()) {
                 case CommonStatusCodes.SUCCESS:
                     String message = (String) extras.get(SmsRetriever.EXTRA_SMS_MESSAGE);
+                    String originatingAddress = null;
+                    if (extras.containsKey(SmsRetriever.EXTRA_SMS_ORIGINATING_ADDRESS)) {
+                        originatingAddress = (String) extras.get(SmsRetriever.EXTRA_SMS_ORIGINATING_ADDRESS);
+                    }
                     if (otpListener != null) {
-                        otpListener.onSmsReceived(message);
+                        otpListener.onSmsReceived(message, originatingAddress);
                     }
                     break;
                 case CommonStatusCodes.TIMEOUT:
@@ -78,7 +82,7 @@ public class SMSBroadcastReceiver extends BroadcastReceiver {
      */
     public interface OTPReceiveListener {
 
-        void onSmsReceived(String smsMessage);
+        void onSmsReceived(String smsMessage, String originatingAddress);
 
         void onSmsReceiveTimeOut();
 

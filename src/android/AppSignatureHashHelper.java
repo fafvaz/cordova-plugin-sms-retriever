@@ -6,8 +6,11 @@ import android.content.pm.PackageManager;
 import android.content.pm.Signature;
 import android.util.Base64;
 import android.util.Log;
+import android.os.Build;
+import android.content.pm.PackageInfo;
+import android.content.pm.SigningInfo;
 
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -32,16 +35,36 @@ public class AppSignatureHashHelper extends ContextWrapper {
         ArrayList<String> appCodes = new ArrayList<String>();
 
         try {
-            // Get all package signatures for the current package
+            // Get all package signatures for the current package in a way
+            // that supports both old and new Android APIs.
             String packageName = getPackageName();
             PackageManager packageManager = getPackageManager();
-            Signature[] signatures = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures;
+            Signature[] signatures = null;
 
-            // For each signature create a compatible hash
-            for (Signature signature : signatures) {
-                String hash = hash(packageName, signature.toCharsString());
-                if (hash != null) {
-                    appCodes.add(String.format("%s", hash));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                try {
+                    PackageInfo packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES);
+                    SigningInfo signingInfo = packageInfo.signingInfo;
+                    if (signingInfo != null) {
+                        signatures = signingInfo.getApkContentsSigners();
+                    }
+                } catch (Exception e) {
+                    // fallback to older API if anything goes wrong
+                    PackageInfo packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
+                    signatures = packageInfo.signatures;
+                }
+            } else {
+                PackageInfo packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
+                signatures = packageInfo.signatures;
+            }
+
+            if (signatures != null) {
+                // For each signature create a compatible hash
+                for (Signature signature : signatures) {
+                    String hash = hash(packageName, signature.toCharsString());
+                    if (hash != null) {
+                        appCodes.add(String.format("%s", hash));
+                    }
                 }
             }
         } catch (PackageManager.NameNotFoundException e) {
@@ -54,7 +77,7 @@ public class AppSignatureHashHelper extends ContextWrapper {
         String appInfo = packageName + " " + signature;
         try {
             MessageDigest messageDigest = MessageDigest.getInstance(HASH_TYPE);
-            messageDigest.update(appInfo.getBytes(StandardCharsets.UTF_8));
+            messageDigest.update(appInfo.getBytes(Charset.forName("UTF-8")));
             byte[] hashSignature = messageDigest.digest();
 
             // truncated into NUM_HASHED_BYTES

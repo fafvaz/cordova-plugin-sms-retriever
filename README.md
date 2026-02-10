@@ -4,17 +4,27 @@
 
 Cordova plugin to receive verification SMS in Android using the [SMS Retriever API](https://developers.google.com/identity/sms-retriever/overview).
 
-# Prerequisites
+## Prerequisites
 
-This plugin requires the [Google Play Services 15.0.0](https://www.apkmirror.com/apk/google-inc/google-play-services/google-play-services-15-0-90-release/ "Google Play Services 15.0.0") or newer in order to work properly.
+Minimum supported Android version: API level 19 (Android 4.4) for the SMS Retriever API to function. Some plugin features (like Phone Number Hint and newer Identity flows) require Google Play Services to be present on the device.
 
-Minimum supported SDK version 21.
+Build requirements for host apps:
+
+- `minSdkVersion`: 19 or greater (SMS Retriever requires >=19)
+- `compileSdkVersion`: 28 or greater
+- Enable AndroidX in the host app (this plugin uses AndroidX classes)
+- If your app uses Java 8 language features (lambdas), enable desugaring in Gradle or I can replace remaining lambdas in the plugin.
+
+Add these to your `platforms/android/app/build.gradle` (or your Cordova Android build config) as appropriate.
+
+Google Play Services: recent Play Services are required on the device. The plugin exposes preferences to allow host apps to override Play Services artifacts and versions via `plugin.xml`.
+
+Example preferences (host app can override):
 
 ```xml
 <platform name="android">
-    ...
-        <preference name="android-minSdkVersion" value="21" />
-    ...
+  <preference name="PLAY_SERVICES_AUTH_VERSION" default="21.2.0"/>
+  <preference name="PLAY_SERVICES_AUTH_API_PHONE_VERSION" default="18.1.0"/>
 </platform>
 ```
 

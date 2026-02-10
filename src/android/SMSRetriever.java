@@ -7,7 +7,8 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.util.Log;
 
-import androidx.fragment.app.FragmentActivity;
+import android.app.Activity;
+import android.app.PendingIntent;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -26,6 +27,8 @@ import com.google.android.gms.auth.api.phone.SmsRetriever;
 import com.google.android.gms.auth.api.phone.SmsRetrieverClient;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
@@ -36,7 +39,8 @@ public class SMSRetriever extends CordovaPlugin implements SMSBroadcastReceiver.
 
     private static String LOG_TAG;
     private static final int RESOLVE_HINT = 234433;
-    private static GoogleApiClient apiClient;
+    private static final int PLAY_SERVICES_RESOLUTION = 234434;
+    // removed GoogleApiClient as it's unused and deprecated
 
     private Context applicationContext;
     private CallbackContext startWatchCallbackContext;
@@ -89,12 +93,15 @@ public class SMSRetriever extends CordovaPlugin implements SMSBroadcastReceiver.
         this.unregisterListeners();
     }
 
-    public void onSmsReceived(String smsMessage) {
+    public void onSmsReceived(String smsMessage, String originatingAddress) {
         Log.w(LOG_TAG, "SMS_RECEIVED");
         Log.w(LOG_TAG, smsMessage);
         try {
             JSONObject item = new JSONObject();
             item.put("sms", smsMessage);
+            if (originatingAddress != null) {
+                item.put("originatingAddress", originatingAddress);
+            }
             PluginResult result = new PluginResult(PluginResult.Status.OK, item);
             startWatchCallbackContext.sendPluginResult(result);
         } catch (JSONException e) {
@@ -128,6 +135,21 @@ public class SMSRetriever extends CordovaPlugin implements SMSBroadcastReceiver.
         // action SmsRetriever#SMS_RETRIEVED_ACTION.
         startWatchCallbackContext = callbackContext;
         try {
+            int playStatus = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(applicationContext);
+            if (playStatus != ConnectionResult.SUCCESS) {
+                String err = "Google Play Services not available: " + GoogleApiAvailability.getInstance().getErrorString(playStatus);
+                // Try to show an update/resolution dialog if possible
+                try {
+                    Activity activity = cordova.getActivity();
+                    if (activity != null && !activity.isFinishing()) {
+                        GoogleApiAvailability.getInstance().getErrorDialog(activity, playStatus, PLAY_SERVICES_RESOLUTION).show();
+                    }
+                } catch (Exception ignored) {
+                }
+                PluginResult result = new PluginResult(PluginResult.Status.ERROR, err);
+                callbackContext.sendPluginResult(result);
+                return;
+            }
             smsBroadcastReceiver = new SMSBroadcastReceiver();
             smsBroadcastReceiver.setOTPListener(this);
 
@@ -211,11 +233,19 @@ public class SMSRetriever extends CordovaPlugin implements SMSBroadcastReceiver.
 
     private void getPhoneNumber(final CallbackContext callbackContext) {
         this.getPhoneNumberCallbackContext = callbackContext;
-        FragmentActivity activity = cordova.getActivity();
-        if (apiClient == null) {
-            apiClient = new GoogleApiClient.Builder(activity)
-                    .addApi(Auth.GOOGLE_SIGN_IN_API)
-                    .build();
+        final Activity activity = cordova.getActivity();
+
+        int playStatus = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(activity);
+        if (playStatus != ConnectionResult.SUCCESS) {
+            String err = "Google Play Services not available: " + GoogleApiAvailability.getInstance().getErrorString(playStatus);
+            try {
+                if (activity != null && !activity.isFinishing()) {
+                    GoogleApiAvailability.getInstance().getErrorDialog(activity, playStatus, PLAY_SERVICES_RESOLUTION).show();
+                }
+            } catch (Exception ignored) {
+            }
+            callbackContext.error(err);
+            return;
         }
 
         cordova.setActivityResultCallback(this);
@@ -223,18 +253,24 @@ public class SMSRetriever extends CordovaPlugin implements SMSBroadcastReceiver.
         GetPhoneNumberHintIntentRequest request = GetPhoneNumberHintIntentRequest.builder().build();
         Identity.getSignInClient(activity)
                 .getPhoneNumberHintIntent(request)
-                .addOnSuccessListener( result -> {
-                    try {
-                        activity.startIntentSenderForResult(result.getIntentSender(), RESOLVE_HINT, null, 0, 0, 0);
-                    } catch(Exception e) {
-                        String message = "Launching the PendingIntent failed";
-                        getPhoneNumberCallbackContext.error(message);
-                        Log.e(LOG_TAG, message, e);
+                .addOnSuccessListener(new OnSuccessListener<PendingIntent>() {
+                    @Override
+                    public void onSuccess(PendingIntent pendingIntent) {
+                        try {
+                            activity.startIntentSenderForResult(pendingIntent.getIntentSender(), RESOLVE_HINT, null, 0, 0, 0);
+                        } catch(Exception e) {
+                            String message = "Launching the PendingIntent failed";
+                            getPhoneNumberCallbackContext.error(message);
+                            Log.e(LOG_TAG, message, e);
+                        }
                     }
                 })
-                .addOnFailureListener(e -> {
-                    getPhoneNumberCallbackContext.error("Phone Number Hint disabled. Enable: Settings -> Google -> Autofill -> Phone number sharing");
-                    Log.e(LOG_TAG, "Phone Number Hint disabled", e);
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(Exception e) {
+                        getPhoneNumberCallbackContext.error("Phone Number Hint disabled. Enable: Settings -> Google -> Autofill -> Phone number sharing");
+                        Log.e(LOG_TAG, "Phone Number Hint disabled", e);
+                    }
                 });
     }
 
@@ -244,7 +280,7 @@ public class SMSRetriever extends CordovaPlugin implements SMSBroadcastReceiver.
         try {
             if (requestCode == RESOLVE_HINT) {
                 if (resultCode == Activity.RESULT_OK) {
-                    FragmentActivity activity = cordova.getActivity();
+                    Activity activity = cordova.getActivity();
                     String phoneNumber = Identity.getSignInClient(activity).getPhoneNumberFromIntent(intent);
                     getPhoneNumberCallbackContext.success(phoneNumber);
                 } else {
