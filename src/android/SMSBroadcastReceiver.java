@@ -35,8 +35,11 @@ public class SMSBroadcastReceiver extends BroadcastReceiver {
                 case CommonStatusCodes.SUCCESS:
                     String message = (String) extras.get(SmsRetriever.EXTRA_SMS_MESSAGE);
                     String originatingAddress = null;
-                    if (extras.containsKey(SmsRetriever.EXTRA_SMS_ORIGINATING_ADDRESS)) {
-                        originatingAddress = (String) extras.get(SmsRetriever.EXTRA_SMS_ORIGINATING_ADDRESS);
+                    // EXTRA_SMS_ORIGINATING_ADDRESS was added in newer Play Services versions.
+                    // Use the string key to avoid compile-time dependency on newer Play Services.
+                    final String ORIGINATING_KEY = "com.google.android.gms.auth.api.phone.EXTRA_SMS_ORIGINATING_ADDRESS";
+                    if (extras.containsKey(ORIGINATING_KEY)) {
+                        originatingAddress = (String) extras.get(ORIGINATING_KEY);
                     }
                     if (otpListener != null) {
                         otpListener.onSmsReceived(message, originatingAddress);
